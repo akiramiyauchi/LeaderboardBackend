@@ -32,12 +32,13 @@
             <tr>
                 <th>順位</th>
                 <th>ユーザー名</th>
-                <th>スコア</th>
+                <th>レベル</th>
+                <th>ダメージ</th>
             </tr>
         </thead>
         <tbody id="leaderboard">
             <tr>
-                <td colspan="3">データを取得中...</td>
+                <td colspan="4">データを取得中...</td>
             </tr>
         </tbody>
     </table>
@@ -45,6 +46,12 @@
     <script>
         // APIエンドポイント
         const apiUrl = 'https://sunny-travesseiro-2df59d.netlify.app/.netlify/functions/leaderboard';
+
+        // レベルのマッピング
+        const levelMapping = [
+            "Beginner 1", "Beginner 2", "Beginner 3", "Beginner 4",
+            "Advanced 1", "Advanced 2", "Advanced 3", "Advanced 4", "Advanced 5"
+        ];
 
         // APIからリーダーボードエントリーを取得して表示
         fetch(apiUrl)
@@ -55,11 +62,17 @@
 
                 // データをテーブルに追加
                 data.data.forEach(entry => {
+                    const score = parseInt(entry.score, 10);
+                    const levelIndex = Math.floor(score / 100);
+                    const level = levelMapping[levelIndex] || "Unknown";
+                    const damage = 11 - (score % 100);
+
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td>${entry.rank}</td>
                         <td>${entry.user.alias}</td>
-                        <td>${entry.score}</td>
+                        <td>${level}</td>
+                        <td>${damage}</td>
                     `;
                     leaderboard.appendChild(row);
                 });
@@ -69,7 +82,7 @@
                 const leaderboard = document.getElementById('leaderboard');
                 leaderboard.innerHTML = `
                     <tr>
-                        <td colspan="3">データの取得に失敗しました。</td>
+                        <td colspan="4">データの取得に失敗しました。</td>
                     </tr>
                 `;
             });
