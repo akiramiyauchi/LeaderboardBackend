@@ -3,13 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leaderboard</title>
+    <title>リーダーボード</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+    </style>
 </head>
 <body>
-    <h1>Welcome to Leaderboard Backend</h1>
-    <p>This is a placeholder page. API is available at:</p>
-    <ul>
-        <li><a href="/.netlify/functions/leaderboard">Leaderboard API</a></li>
-    </ul>
+    <h1>Metaリーダーボード</h1>
+    <p>リーダーボードのエントリー内容:</p>
+    <table>
+        <thead>
+            <tr>
+                <th>順位</th>
+                <th>ユーザー名</th>
+                <th>スコア</th>
+            </tr>
+        </thead>
+        <tbody id="leaderboard">
+            <tr>
+                <td colspan="3">データを取得中...</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script>
+        // APIエンドポイント
+        const apiUrl = 'https://sunny-travesseiro-2df59d.netlify.app/.netlify/functions/leaderboard';
+
+        // APIからリーダーボードエントリーを取得して表示
+        fetch(apiUrl)
+            .then(response => response.json())
+            .then(data => {
+                const leaderboard = document.getElementById('leaderboard');
+                leaderboard.innerHTML = ''; // 既存の行を削除
+
+                // データをテーブルに追加
+                data.data.forEach(entry => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${entry.rank}</td>
+                        <td>${entry.user.alias}</td>
+                        <td>${entry.score}</td>
+                    `;
+                    leaderboard.appendChild(row);
+                });
+            })
+            .catch(error => {
+                console.error('リーダーボードデータの取得に失敗:', error);
+                const leaderboard = document.getElementById('leaderboard');
+                leaderboard.innerHTML = `
+                    <tr>
+                        <td colspan="3">データの取得に失敗しました。</td>
+                    </tr>
+                `;
+            });
+    </script>
 </body>
 </html>
