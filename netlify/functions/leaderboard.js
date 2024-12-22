@@ -10,7 +10,8 @@ exports.handler = async function (event, context) {
         // APIリクエスト
         const response = await fetch(`${API_URL}&access_token=${ACCESS_TOKEN}`);
         const data = await response.json();
-
+        console.log("API Response:", data); // レスポンス全体をログに表示
+        
         // 成功時のレスポンス
         return {
             statusCode: 200,
