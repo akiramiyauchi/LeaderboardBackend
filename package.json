@@ -8,7 +8,7 @@
         "start": "node netlify/functions/leaderboard.js"
     },
     "dependencies": {
-        "axios": "^1.3.4"
+        "node-fetch": "^2.6.7"
     },
     "engines": {
         "node": "18.x"
