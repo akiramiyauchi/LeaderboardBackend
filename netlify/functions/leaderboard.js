@@ -4,7 +4,7 @@ exports.handler = async function (event, context) {
     const APP_ID = "7951375894910515"; // あなたのAPP_ID
     const APP_SECRET = "a7fa72a764bb60aa20513e272fceeee3"; // あなたのAPP_SECRET
     const ACCESS_TOKEN = `OC|${APP_ID}|${APP_SECRET}`;
-    const API_URL = `https://graph.oculus.com/${APP_ID}/leaderboard_entries?api_name=HIGH_SCORE&fields=rank,user{id},score`;
+    const API_URL = `https://graph.oculus.com/leaderboard_entries?api_name=HIGH_SCORE&fields=rank,user{id},score`;
 
     try {
         // APIリクエスト
