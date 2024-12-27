@@ -83,49 +83,53 @@
         &copy; 2024 EasyPong Leaderboard
     </footer>
 
-    <script>
-        // API Endpoint
-        const apiUrl = 'https://easypong-leaderboard.netlify.app/.netlify/functions/leaderboard';
+<script>
+    const apiUrl = 'https://easypong-leaderboard.netlify.app/.netlify/functions/leaderboard';
 
-        // Level Mapping
-        const levelMapping = [
-            "Beginner 1", "Beginner 2", "Beginner 3", "Beginner 4",
-            "Advanced 1", "Advanced 2", "Advanced 3", "Advanced 4", "Advanced 5"
-        ];
+    const levelMapping = [
+        "Beginner 1", "Beginner 2", "Beginner 3", "Beginner 4",
+        "Advanced 1", "Advanced 2", "Advanced 3", "Advanced 4", "Advanced 5",
+        "Expert 1", "Expert 2", "Expert 3", "Expert 4"
+    ];
 
-        // Fetch leaderboard data and populate the table
-        fetch(apiUrl)
-            .then(response => response.json())
-            .then(data => {
-                const leaderboard = document.getElementById('leaderboard');
-                leaderboard.innerHTML = ''; // Clear existing rows
+    fetch(apiUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const leaderboardData = data.data || data;
+            const leaderboard = document.getElementById('leaderboard');
+            leaderboard.innerHTML = ''; // Clear existing rows
 
-                // Populate rows with leaderboard data
-                data.data.forEach(entry => {
-                    const score = parseInt(entry.score, 10);
-                    const levelIndex = Math.floor(score / 100);
-                    const level = levelMapping[levelIndex] || "Unknown";
-                    const damage = 11 - (score % 100);
+            leaderboardData.forEach(entry => {
+                const score = parseInt(entry.score, 10);
+                const levelIndex = Math.floor(score / 100);
+                const level = levelMapping[levelIndex] || "Unknown";
+                const damage = 11 - (score % 100);
 
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${entry.rank}</td>
-                        <td>${entry.user.alias}</td>
-                        <td>${level}</td>
-                        <td>${damage}</td>
-                    `;
-                    leaderboard.appendChild(row);
-                });
-            })
-            .catch(error => {
-                console.error('Failed to fetch leaderboard data:', error);
-                const leaderboard = document.getElementById('leaderboard');
-                leaderboard.innerHTML = `
-                    <tr>
-                        <td colspan="4">Failed to load data.</td>
-                    </tr>
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${entry.rank}</td>
+                    <td>${entry.user.alias}</td>
+                    <td>${level}</td>
+                    <td>${damage}</td>
                 `;
+                leaderboard.appendChild(row);
             });
-    </script>
+        })
+        .catch(error => {
+            console.error('Failed to fetch leaderboard data:', error);
+            const leaderboard = document.getElementById('leaderboard');
+            leaderboard.innerHTML = `
+                <tr>
+                    <td colspan="4">Failed to load data. Please try again later.</td>
+                </tr>
+            `;
+        });
+</script>
+
 </body>
 </html>
