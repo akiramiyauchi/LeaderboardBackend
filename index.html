@@ -113,7 +113,7 @@
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${entry.rank}</td>
-                    <td>${entry.user.alias}</td>
+                    <td>${entry.user.displayName}</td> <!-- aliasをdisplayNameに変更 -->
                     <td>${level}</td>
                     <td>${damage}</td>
                 `;
