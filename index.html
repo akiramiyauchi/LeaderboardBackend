@@ -21,6 +21,14 @@
             font-weight: bold;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
         }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+        select {
+            padding: 10px;
+            font-size: 1rem;
+        }
         table {
             width: 80%;
             margin: 30px auto;
@@ -60,8 +68,19 @@
 </head>
 <body>
     <header>
-        Leaderboard Rankings
+        <h1>Leaderboard Rankings</h1>
     </header>
+
+    <!-- ✅ トグル用のセレクトメニューを追加 -->
+    <div class="controls">
+        <label for="leaderboardType">Select Leaderboard:</label>
+        <select id="leaderboardType" onchange="fetchLeaderboard()">
+            <option value="HIGH_SCORE_ALL">Lifetime Ranking</option>
+            <option value="HIGH_SCORE_MONTH">Monthly Ranking</option>
+            <option value="HIGH_SCORE_SPEED">Speed Ranking</option>
+        </select>
+    </div>
+
     <main>
         <table>
             <thead>
@@ -71,7 +90,7 @@
                     <th>Level</th>
                     <th>Damage</th>
                     <th>Time</th>
-                    <th>Date</th> <!-- ✅ 追加 -->
+                    <th>Date</th>
                 </tr>
             </thead>
             <tbody id="leaderboard">
@@ -81,13 +100,13 @@
             </tbody>
         </table>
     </main>
+
     <footer>
         &copy; 2024 EasyPong Leaderboard
     </footer>
 
 <script>
-    const apiUrl = 'https://easypong-leaderboard.netlify.app/.netlify/functions/leaderboard';
-
+    const apiBaseUrl = 'https://easypong-leaderboard.netlify.app/.netlify/functions/leaderboard';
     const levelMapping = [
         "Beginner 1", "Beginner 2", "Beginner 3", "Beginner 4",
         "Advanced 1", "Advanced 2", "Advanced 3", "Advanced 4", "Advanced 5",
@@ -95,67 +114,65 @@
     ];
 
     function formatDate(timestamp) {
-        const date = new Date(timestamp * 1000); // UnixTime (秒) をミリ秒に変換
+        const date = new Date(timestamp * 1000);
         return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
     }
 
-    fetch(apiUrl)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            const leaderboardData = data.data || data;
-            const leaderboard = document.getElementById('leaderboard');
-            leaderboard.innerHTML = ''; // Clear existing rows
+    function fetchLeaderboard() {
+        // ✅ セレクトボックスの値から `api_name` を取得
+        const leaderboardType = document.getElementById('leaderboardType').value;
+        const apiUrl = `${apiBaseUrl}?api_name=${leaderboardType}`;
 
-            leaderboardData.forEach(entry => {
-                const score = parseInt(entry.score, 10);
+        fetch(apiUrl)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                const leaderboardData = data.data || data;
+                const leaderboard = document.getElementById('leaderboard');
+                leaderboard.innerHTML = ''; // Clear existing rows
 
-                // レベルを計算
-                const levelIndex = Math.floor(score / 1000000);
-                const level = levelMapping[levelIndex] || "Unknown";
+                leaderboardData.forEach(entry => {
+                    const score = parseInt(entry.score, 10);
+                    const levelIndex = Math.floor(score / 1000000);
+                    const level = levelMapping[levelIndex] || "Unknown";
+                    const life = Math.floor((score % 1000000) / 10000);
+                    const damage = 11 - life;
+                    const timePoint = score % 10000;
+                    const rallyTimeInSeconds = 3600 - timePoint;
+                    const minutes = Math.floor(rallyTimeInSeconds / 60);
+                    const seconds = rallyTimeInSeconds % 60;
+                    const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                    const formattedDate = entry.timestamp ? formatDate(entry.timestamp) : "N/A";
 
-                // ライフとダメージを計算
-                const life = Math.floor((score % 1000000) / 10000);
-                const damage = 11 - life;
-
-                // 時間ポイントとラリー時間を計算
-                const timePoint = score % 10000; // 10000で割った余り
-                const rallyTimeInSeconds = 3600 - timePoint; // ラリー時間
-                const minutes = Math.floor(rallyTimeInSeconds / 60); // 分
-                const seconds = rallyTimeInSeconds % 60; // 秒
-
-                // 時間をフォーマット
-                const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-                // ✅ Date を mm/dd 形式で変換
-                const formattedDate = entry.timestamp ? formatDate(entry.timestamp) : "N/A";
-
-                // テーブル行を生成
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${entry.rank}</td>
-                    <td>${entry.user.display_name || entry.user.alias}</td>
-                    <td>${level}</td>
-                    <td>${damage}</td>
-                    <td>${formattedTime}</td>
-                    <td>${formattedDate}</td> <!-- ✅ 追加 -->
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${entry.rank}</td>
+                        <td>${entry.user.display_name || entry.user.alias}</td>
+                        <td>${level}</td>
+                        <td>${damage}</td>
+                        <td>${formattedTime}</td>
+                        <td>${formattedDate}</td>
+                    `;
+                    leaderboard.appendChild(row);
+                });
+            })
+            .catch(error => {
+                console.error('Failed to fetch leaderboard data:', error);
+                const leaderboard = document.getElementById('leaderboard');
+                leaderboard.innerHTML = `
+                    <tr>
+                        <td colspan="6">Failed to load data. Please try again later.</td>
+                    </tr>
                 `;
-                leaderboard.appendChild(row);
             });
-        })
-        .catch(error => {
-            console.error('Failed to fetch leaderboard data:', error);
-            const leaderboard = document.getElementById('leaderboard');
-            leaderboard.innerHTML = `
-                <tr>
-                    <td colspan="6">Failed to load data. Please try again later.</td>
-                </tr>
-            `;
-        });
+    }
+
+    // ✅ 初回ロード時に `HIGH_SCORE_ALL` を取得
+    document.addEventListener("DOMContentLoaded", fetchLeaderboard);
 </script>
 
 </body>
