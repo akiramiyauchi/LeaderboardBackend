@@ -71,11 +71,12 @@
                     <th>Level</th>
                     <th>Damage</th>
                     <th>Time</th>
+                    <th>Date</th> <!-- ✅ 追加 -->
                 </tr>
             </thead>
             <tbody id="leaderboard">
                 <tr>
-                    <td colspan="5">Loading data...</td>
+                    <td colspan="6">Loading data...</td>
                 </tr>
             </tbody>
         </table>
@@ -92,6 +93,11 @@
         "Advanced 1", "Advanced 2", "Advanced 3", "Advanced 4", "Advanced 5",
         "Expert 1", "Expert 2", "Expert 3", "Expert 4"
     ];
+
+    function formatDate(timestamp) {
+        const date = new Date(timestamp * 1000); // UnixTime (秒) をミリ秒に変換
+        return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+    }
 
     fetch(apiUrl)
         .then(response => {
@@ -125,6 +131,9 @@
                 // 時間をフォーマット
                 const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
+                // ✅ Date を mm/dd 形式で変換
+                const formattedDate = entry.timestamp ? formatDate(entry.timestamp) : "N/A";
+
                 // テーブル行を生成
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -133,6 +142,7 @@
                     <td>${level}</td>
                     <td>${damage}</td>
                     <td>${formattedTime}</td>
+                    <td>${formattedDate}</td> <!-- ✅ 追加 -->
                 `;
                 leaderboard.appendChild(row);
             });
@@ -142,7 +152,7 @@
             const leaderboard = document.getElementById('leaderboard');
             leaderboard.innerHTML = `
                 <tr>
-                    <td colspan="5">Failed to load data. Please try again later.</td>
+                    <td colspan="6">Failed to load data. Please try again later.</td>
                 </tr>
             `;
         });
