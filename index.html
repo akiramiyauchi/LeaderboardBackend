@@ -83,12 +83,12 @@
 
     <main>
         <table>
-            <thead>
+            <thead id="tableHead">
                 <tr>
                     <th>Rank</th>
                     <th>Username</th>
-                    <th>Level</th>
-                    <th>Damage</th>
+                    <th id="levelHeader">Level</th>
+                    <th id="damageHeader">Damage</th>
                     <th>Time</th>
                     <th>Date</th>
                 </tr>
@@ -118,10 +118,23 @@
         return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
     }
 
+    function formatSpeedTime(score) {
+        const timePoint = parseInt(score, 10);
+        const rallyTimeInMilliseconds = 3600000 - timePoint;
+        const minutes = Math.floor(rallyTimeInMilliseconds / 60000);
+        const seconds = Math.floor((rallyTimeInMilliseconds % 60000) / 1000);
+        const milliseconds = rallyTimeInMilliseconds % 1000;
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+    }
+
     function fetchLeaderboard() {
-        // ✅ セレクトボックスの値から `api_name` を取得
         const leaderboardType = document.getElementById('leaderboardType').value;
         const apiUrl = `${apiBaseUrl}?api_name=${leaderboardType}`;
+
+        // ✅ Speed Ranking なら Level & Damage の列を隠す
+        const isSpeedRanking = leaderboardType === "HIGH_SCORE_SPEED";
+        document.getElementById('levelHeader').style.display = isSpeedRanking ? "none" : "table-cell";
+        document.getElementById('damageHeader').style.display = isSpeedRanking ? "none" : "table-cell";
 
         fetch(apiUrl)
             .then(response => {
@@ -137,24 +150,36 @@
 
                 leaderboardData.forEach(entry => {
                     const score = parseInt(entry.score, 10);
-                    const levelIndex = Math.floor(score / 1000000);
-                    const level = levelMapping[levelIndex] || "Unknown";
-                    const life = Math.floor((score % 1000000) / 10000);
-                    const damage = 11 - life;
-                    const timePoint = score % 10000;
-                    const rallyTimeInSeconds = 3600 - timePoint;
-                    const minutes = Math.floor(rallyTimeInSeconds / 60);
-                    const seconds = rallyTimeInSeconds % 60;
-                    const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
                     const formattedDate = entry.timestamp ? formatDate(entry.timestamp) : "N/A";
+
+                    let timeValue = "";
+                    let levelColumn = "";
+                    let damageColumn = "";
+
+                    if (isSpeedRanking) {
+                        timeValue = formatSpeedTime(score);
+                    } else {
+                        const levelIndex = Math.floor(score / 1000000);
+                        const level = levelMapping[levelIndex] || "Unknown";
+                        const life = Math.floor((score % 1000000) / 10000);
+                        const damage = 11 - life;
+                        levelColumn = `<td>${level}</td>`;
+                        damageColumn = `<td>${damage}</td>`;
+
+                        const timePoint = score % 10000;
+                        const rallyTimeInSeconds = 3600 - timePoint;
+                        const minutes = Math.floor(rallyTimeInSeconds / 60);
+                        const seconds = rallyTimeInSeconds % 60;
+                        timeValue = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                    }
 
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td>${entry.rank}</td>
                         <td>${entry.user.display_name || entry.user.alias}</td>
-                        <td>${level}</td>
-                        <td>${damage}</td>
-                        <td>${formattedTime}</td>
+                        ${isSpeedRanking ? "" : levelColumn}
+                        ${isSpeedRanking ? "" : damageColumn}
+                        <td>${timeValue}</td>
                         <td>${formattedDate}</td>
                     `;
                     leaderboard.appendChild(row);
@@ -171,7 +196,6 @@
             });
     }
 
-    // ✅ 初回ロード時に `HIGH_SCORE_ALL` を取得
     document.addEventListener("DOMContentLoaded", fetchLeaderboard);
 </script>
 
