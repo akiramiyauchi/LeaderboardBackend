@@ -90,7 +90,7 @@
         <select id="leaderboardType" onchange="fetchLeaderboard(true)">
             <option value="HIGH_SCORE_ALL">Lifetime Ranking</option>
             <option value="HIGH_SCORE_MONTH">Monthly Ranking</option>
-            <option value="HIGH_SCORE_SPEED">Speed Ranking</option>
+            <option value="HIGH_SCORE_SPEED">Monthly Speed Ranking</option>
         </select>
     </div>
 
@@ -142,7 +142,11 @@
         const milliseconds = rallyTimeInMilliseconds % 1000;
         return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
     }
-
+    function isCurrentMonthEntry(timestamp) {
+        const entryDate = new Date(timestamp * 1000);
+        const now = new Date();
+        return entryDate.getFullYear() === now.getFullYear() && entryDate.getMonth() === now.getMonth();
+    }
     function fetchLeaderboard(reset = true) {
         const leaderboardType = document.getElementById('leaderboardType').value;
         let apiUrl = `${apiBaseUrl}?api_name=${leaderboardType}`;
@@ -171,6 +175,12 @@
                 }
 
                 leaderboardData.forEach(entry => {
+                    if (leaderboardType === "HIGH_SCORE_MONTH" && !isCurrentMonthEntry(entry.timestamp)) {
+                        return; 
+                    }
+                    if (leaderboardType === "HIGH_SCORE_SPEED" && !isCurrentMonthEntry(entry.timestamp)) {
+                        return; 
+                    }
                     const score = parseInt(entry.score, 10);
                     const formattedDate = entry.timestamp ? formatDate(entry.timestamp) : "N/A";
 
