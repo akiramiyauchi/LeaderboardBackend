@@ -64,6 +64,20 @@
             margin-top: 20px;
             border-top: 1px solid #ddd;
         }
+        #loadMoreBtn {
+            display: none;
+            margin: 20px auto;
+            padding: 10px 20px;
+            font-size: 1rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        #loadMoreBtn:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 <body>
@@ -71,10 +85,9 @@
         <h1>Leaderboard Rankings</h1>
     </header>
 
-    <!-- ✅ トグル用のセレクトメニューを追加 -->
     <div class="controls">
         <label for="leaderboardType">Select Leaderboard:</label>
-        <select id="leaderboardType" onchange="fetchLeaderboard()">
+        <select id="leaderboardType" onchange="fetchLeaderboard(true)">
             <option value="HIGH_SCORE_ALL">Lifetime Ranking</option>
             <option value="HIGH_SCORE_MONTH">Monthly Ranking</option>
             <option value="HIGH_SCORE_SPEED">Speed Ranking</option>
@@ -99,6 +112,7 @@
                 </tr>
             </tbody>
         </table>
+        <button id="loadMoreBtn" onclick="loadMoreEntries()">Load More</button>
     </main>
 
     <footer>
@@ -112,6 +126,8 @@
         "Advanced 1", "Advanced 2", "Advanced 3", "Advanced 4", "Advanced 5",
         "Expert 1", "Expert 2", "Expert 3", "Expert 4"
     ];
+
+    let nextPageUrl = null; 
 
     function formatDate(timestamp) {
         const date = new Date(timestamp * 1000);
@@ -127,11 +143,14 @@
         return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
     }
 
-    function fetchLeaderboard() {
+    function fetchLeaderboard(reset = true) {
         const leaderboardType = document.getElementById('leaderboardType').value;
-        const apiUrl = `${apiBaseUrl}?api_name=${leaderboardType}`;
+        let apiUrl = `${apiBaseUrl}?api_name=${leaderboardType}`;
 
-        // ✅ Speed Ranking なら Level & Damage の列を隠す
+        if (!reset && nextPageUrl) {
+            apiUrl = nextPageUrl;
+        }
+
         const isSpeedRanking = leaderboardType === "HIGH_SCORE_SPEED";
         document.getElementById('levelHeader').style.display = isSpeedRanking ? "none" : "table-cell";
         document.getElementById('damageHeader').style.display = isSpeedRanking ? "none" : "table-cell";
@@ -146,7 +165,10 @@
             .then(data => {
                 const leaderboardData = data.data || data;
                 const leaderboard = document.getElementById('leaderboard');
-                leaderboard.innerHTML = ''; // Clear existing rows
+
+                if (reset) {
+                    leaderboard.innerHTML = ''; 
+                }
 
                 leaderboardData.forEach(entry => {
                     const score = parseInt(entry.score, 10);
@@ -184,11 +206,15 @@
                     `;
                     leaderboard.appendChild(row);
                 });
+
+                nextPageUrl = data.paging?.next || null;
+
+                const loadMoreBtn = document.getElementById("loadMoreBtn");
+                loadMoreBtn.style.display = nextPageUrl ? "block" : "none";
             })
             .catch(error => {
                 console.error('Failed to fetch leaderboard data:', error);
-                const leaderboard = document.getElementById('leaderboard');
-                leaderboard.innerHTML = `
+                document.getElementById('leaderboard').innerHTML = `
                     <tr>
                         <td colspan="6">Failed to load data. Please try again later.</td>
                     </tr>
@@ -196,7 +222,11 @@
             });
     }
 
-    document.addEventListener("DOMContentLoaded", fetchLeaderboard);
+    function loadMoreEntries() {
+        fetchLeaderboard(false);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => fetchLeaderboard(true));
 </script>
 
 </body>
