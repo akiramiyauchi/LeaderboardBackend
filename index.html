@@ -149,7 +149,7 @@
     }
     function fetchLeaderboard(reset = true) {
         const leaderboardType = document.getElementById('leaderboardType').value;
-        let apiUrl = `${apiBaseUrl}?api_name=${leaderboardType}`;
+        let apiUrl = `${apiBaseUrl}?api_name=${leaderboardType}&limit=50`;
 
         if (!reset && nextPageUrl) {
             apiUrl = nextPageUrl;
