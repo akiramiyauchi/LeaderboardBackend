@@ -9,12 +9,19 @@ exports.handler = async function (event, context) {
     const params = new URLSearchParams(event.queryStringParameters);
     const apiName = params.get("api_name") || "HIGH_SCORE_ALL"; 
 
-    const API_URL = `https://graph.oculus.com/leaderboard_entries?api_name=${apiName}&fields=rank,user{alias,display_name},score,timestamp`;
+    const API_URL = `https://graph.oculus.com/leaderboard_entries?api_name=${apiName}&fields=rank,user{alias,display_name},score,timestamp&limit=100`;
 
-    // 全ページを取得する関数
-    async function fetchAllPages(url, results = []) {
+    // ✅ タイムアウト設定（5秒でキャンセル）
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    // ✅ 上位 300 件に制限
+    const MAX_ENTRIES = 300;
+
+    async function fetchLimitedPages(url, results = []) {
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeout); // レスポンス成功ならタイマー解除
             const data = await response.json();
 
             if (!response.ok) {
@@ -23,9 +30,15 @@ exports.handler = async function (event, context) {
 
             results.push(...data.data);
 
-            if (data.paging && data.paging.next) {
+            // ✅ 300 件に達したら終了
+            if (results.length >= MAX_ENTRIES) {
+                return results.slice(0, MAX_ENTRIES);
+            }
+
+            // ✅ ページネーション制限（5ページまで）
+            if (data.paging && data.paging.next && results.length < MAX_ENTRIES) {
                 console.log("次のページのURL:", data.paging.next);
-                return fetchAllPages(data.paging.next, results);
+                return fetchLimitedPages(data.paging.next, results);
             } else {
                 return results;
             }
@@ -36,12 +49,16 @@ exports.handler = async function (event, context) {
 
     try {
         // ✅ `api_name` を動的に変更
-        const allData = await fetchAllPages(`${API_URL}&access_token=${ACCESS_TOKEN}`);
+        const allData = await fetchLimitedPages(`${API_URL}&access_token=${ACCESS_TOKEN}`);
 
-        console.log(`全データ取得完了 (${apiName}):`, allData);
+        console.log(`全データ取得完了 (${apiName}):`, allData.length);
 
         return {
             statusCode: 200,
+            headers: {
+                "Access-Control-Allow-Origin": "*", // CORS 対応
+                "Content-Type": "application/json"
+            },
             body: JSON.stringify(allData),
         };
     } catch (error) {
