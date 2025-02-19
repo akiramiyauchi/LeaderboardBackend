@@ -167,6 +167,9 @@
                 return response.json();
             })
             .then(data => {
+                if (!data.data) {
+                    throw new Error("No data received from API");
+                }
                 const leaderboardData = data.data || data;
                 const leaderboard = document.getElementById('leaderboard');
 
@@ -216,7 +219,14 @@
                     `;
                     leaderboard.appendChild(row);
                 });
-
+               .catch(error => {
+                    console.error('Failed to fetch leaderboard data:', error);
+                    document.getElementById('leaderboard').innerHTML = `
+                        <tr>
+                            <td colspan="6">Failed to load data. Error: ${error.message}</td>
+                        </tr>
+                    `;
+                });
                 nextPageUrl = data.paging?.next || null;
 
                 const loadMoreBtn = document.getElementById("loadMoreBtn");
