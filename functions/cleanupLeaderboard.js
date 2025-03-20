@@ -13,12 +13,10 @@ exports.handler = async function () {
     console.log("==== Start Cleaning Leaderboards ====");
 
     try {
-        for (const leaderboard of LEADERBOARDS) {
-            console.log(`Processing leaderboard: ${leaderboard}`);
-            await cleanLeaderboardEntries(leaderboard);
-        }
+        // 🔹 並列処理でリーダーボードを処理
+        await Promise.all(LEADERBOARDS.map(cleanLeaderboardEntries));
 
-        console.log("==== Cleanup Function Completed ====");
+        console.log("✅ Cleanup Function Completed");
         return {
             statusCode: 200,
             body: "Leaderboard cleanup complete.",
@@ -34,13 +32,13 @@ exports.handler = async function () {
 
 // ✅ リーダーボードのエントリーを取得・削除
 async function cleanLeaderboardEntries(leaderboardName) {
-    console.log(`Fetching entries for leaderboard: ${leaderboardName}`);
+    console.log(`🚀 Processing leaderboard: ${leaderboardName}`);
 
     let allEntries = [];
     let nextUrl = `https://graph.oculus.com/leaderboard_entries?api_name=${leaderboardName}&access_token=${ACCESS_TOKEN}&fields=id,timestamp,rank,score,user{id,alias,profile_url},extra_data_base64&filter=NONE&limit=100`;
 
     while (nextUrl) {
-        console.log(`Fetching: ${nextUrl}`);
+        console.log(`📡 Fetching: ${nextUrl}`);
         const response = await fetch(nextUrl);
         if (!response.ok) {
             console.log(`❌ Failed to fetch ${leaderboardName}: ${response.status}`);
@@ -53,40 +51,48 @@ async function cleanLeaderboardEntries(leaderboardName) {
         }
 
         nextUrl = data?.paging?.next || null;
+
+        // 🔹 500 件取得したら終了 (Netlify の 10 秒制限対策)
+        if (allEntries.length >= 500) {
+            console.log(`⚠️ Fetch limit reached (500 entries), stopping.`);
+            break;
+        }
     }
 
     console.log(`✅ Total ${allEntries.length} entries fetched for ${leaderboardName}.`);
 
-    // ✅ HIGH_SCORE_SPEED のトップエントリーを保存
+    // 🔹 HIGH_SCORE_SPEED のトップエントリーを保存
     if (leaderboardName === "HIGH_SCORE_SPEED") {
         const topEntry = allEntries.find((entry) => entry.rank === 1);
         if (topEntry) {
-            console.log("Saving top entry to HIGH_SCORE_SPEED_ALL");
+            console.log("🏆 Saving top entry to HIGH_SCORE_SPEED_ALL");
             await saveEntryToAllTimeLeaderboard(topEntry);
         }
     }
 
-    // ✅ 現在の年月を取得
+    // 🔹 現在の年月を取得
     const now = new Date();
-    const currentMonth = now.getMonth() + 1; // JSは0から始まるため +1
+    const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
-    // ✅ 先月以前のエントリーを削除
-    for (const entry of allEntries) {
-        const entryDate = new Date(entry.timestamp * 1000); // UNIX秒をミリ秒に変換
-        const entryMonth = entryDate.getMonth() + 1;
-        const entryYear = entryDate.getFullYear();
+    // 🔹 先月以前のエントリーを削除 (並列処理)
+    const deletePromises = allEntries
+        .filter((entry) => {
+            const entryDate = new Date(entry.timestamp * 1000);
+            return (
+                entryDate.getFullYear() < currentYear ||
+                (entryDate.getFullYear() === currentYear && entryDate.getMonth() + 1 < currentMonth)
+            );
+        })
+        .map((entry) => deleteEntry(entry.id, leaderboardName));
 
-        if (entryYear < currentYear || (entryYear === currentYear && entryMonth < currentMonth)) {
-            console.log(`🗑️ Deleting: ${entry.user.alias} (${entryDate.toISOString().slice(0, 10)})`);
-            await deleteEntry(entry.id, leaderboardName);
-        }
-    }
+    await Promise.all(deletePromises);
+    console.log(`🗑️ Completed cleanup for ${leaderboardName}`);
 }
 
 // ✅ トップスコアを ALL TIME リーダーボードに保存
 async function saveEntryToAllTimeLeaderboard(entry) {
-    console.log(`Saving entry ${entry.id} to HIGH_SCORE_SPEED_ALL`);
+    console.log(`🔄 Saving entry ${entry.id} to HIGH_SCORE_SPEED_ALL`);
 
     const scoreValue = parseInt(entry.score, 10);
     if (isNaN(scoreValue)) {
