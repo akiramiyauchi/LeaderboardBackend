@@ -5,15 +5,14 @@ const APP_ID = "7951375894910515";
 const APP_SECRET = "a7fa72a764bb60aa20513e272fceeee3";
 const ACCESS_TOKEN = `OC|${APP_ID}|${APP_SECRET}`;
 
-//const LEADERBOARDS = ["HIGH_SCORE_MONTH", "HIGH_SCORE_SPEED"];
-const LEADERBOARDS = ["TEST", "TEST2"];
+const LEADERBOARDS = ["TEST", "TEST2", "HIGH_SCORE_SPEED"];
 
 // ✅ Netlify Function
 exports.handler = async function () {
     console.log("==== Start Cleaning Leaderboards ====");
 
     try {
-        // 🔹 並列処理でリーダーボードを処理
+        // 🔹 並列処理でリーダーボードを取得・削除
         await Promise.all(LEADERBOARDS.map(cleanLeaderboardEntries));
 
         console.log("✅ Cleanup Function Completed");
@@ -34,30 +33,7 @@ exports.handler = async function () {
 async function cleanLeaderboardEntries(leaderboardName) {
     console.log(`🚀 Processing leaderboard: ${leaderboardName}`);
 
-    let allEntries = [];
-    let nextUrl = `https://graph.oculus.com/leaderboard_entries?api_name=${leaderboardName}&access_token=${ACCESS_TOKEN}&fields=id,timestamp,rank,score,user{id,alias,profile_url},extra_data_base64&filter=NONE&limit=100`;
-
-    while (nextUrl) {
-        console.log(`📡 Fetching: ${nextUrl}`);
-        const response = await fetch(nextUrl);
-        if (!response.ok) {
-            console.log(`❌ Failed to fetch ${leaderboardName}: ${response.status}`);
-            return;
-        }
-
-        const data = await response.json();
-        if (data?.data) {
-            allEntries.push(...data.data);
-        }
-
-        nextUrl = data?.paging?.next || null;
-
-        // 🔹 500 件取得したら終了 (Netlify の 10 秒制限対策)
-        if (allEntries.length >= 500) {
-            console.log(`⚠️ Fetch limit reached (500 entries), stopping.`);
-            break;
-        }
-    }
+    const allEntries = await fetchLeaderboardEntries(leaderboardName);
 
     console.log(`✅ Total ${allEntries.length} entries fetched for ${leaderboardName}.`);
 
@@ -86,7 +62,6 @@ async function cleanLeaderboardEntries(leaderboardName) {
 
     console.log(`🗑️ Found ${entriesToDelete.length} entries to delete in ${leaderboardName}`);
 
-    // 🔹 削除対象のエントリーをログに出力
     if (entriesToDelete.length > 0) {
         console.log("📋 Entries to delete:");
         entriesToDelete.forEach((entry) => {
@@ -110,6 +85,76 @@ async function cleanLeaderboardEntries(leaderboardName) {
     }
 
     console.log(`🗑️ Completed cleanup for ${leaderboardName}`);
+}
+
+// ✅ 並列化したエントリー取得関数
+async function fetchLeaderboardEntries(leaderboardName) {
+    console.log(`📡 Fetching entries for leaderboard: ${leaderboardName}`);
+
+    let allEntries = [];
+    let nextUrls = [
+        `https://graph.oculus.com/leaderboard_entries?api_name=${leaderboardName}&access_token=${ACCESS_TOKEN}&fields=id,timestamp,rank,score,user{id,alias,profile_url},extra_data_base64&filter=NONE&limit=100`,
+    ];
+
+    while (nextUrls.length > 0) {
+        const requests = nextUrls.map((url) => fetch(url).then((res) => res.json()));
+
+        try {
+            const responses = await Promise.all(requests);
+
+            responses.forEach((data, index) => {
+                if (data?.data) {
+                    allEntries.push(...data.data);
+                }
+                nextUrls[index] = data?.paging?.next || null;
+            });
+
+            // 🔹 500 件取得したら終了 (Netlify の 10 秒制限対策)
+            if (allEntries.length >= 500) {
+                console.log(`⚠️ Fetch limit reached (500 entries), stopping.`);
+                break;
+            }
+
+            // 🔹 `null` を削除して次のリクエストを絞る
+            nextUrls = nextUrls.filter((url) => url !== null);
+        } catch (error) {
+            console.error(`❌ Error fetching leaderboard entries for ${leaderboardName}:`, error);
+            break;
+        }
+    }
+
+    return allEntries;
+}
+
+// ✅ トップスコアを ALL TIME リーダーボードに保存
+async function saveEntryToAllTimeLeaderboard(entry) {
+    console.log(`🔄 Saving entry ${entry.id} to HIGH_SCORE_SPEED_ALL`);
+
+    const scoreValue = parseInt(entry.score, 10);
+    if (isNaN(scoreValue)) {
+        console.log(`❌ Invalid score format for entry ${entry.id}, skipping...`);
+        return;
+    }
+
+    const body = new URLSearchParams({
+        api_name: "HIGH_SCORE_SPEED_ALL",
+        access_token: ACCESS_TOKEN,
+        score: scoreValue.toString(),
+        extra_data_base64: entry.extra_data_base64 || "",
+        user_id: entry.user.id,
+        force_update: "true",
+    });
+
+    const response = await fetch("https://graph.oculus.com/leaderboard_submit_entry", {
+        method: "POST",
+        body: body,
+    });
+
+    if (response.ok) {
+        console.log(`✅ Successfully saved entry ${entry.id} to HIGH_SCORE_SPEED_ALL.`);
+    } else {
+        console.log(`❌ Failed to save entry ${entry.id}. Response:`, await response.text());
+    }
 }
 
 // ✅ リーダーボードのエントリー削除
