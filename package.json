@@ -2,13 +2,10 @@
     "name": "leaderboard-backend",
     "version": "1.0.0",
     "description": "Netlify Functions for Meta Leaderboard",
-    "type": "module",
     "main": "netlify/functions/leaderboard.js",
     "scripts": {
-        "start": "node netlify/functions/leaderboard.js"
-    },
-    "dependencies": {
-        "node-fetch": "^2.6.7"
+        "start": "node netlify/functions/leaderboard.js",
+        "test-cleanup": "node netlify/functions/cleanupLeaderboard.js"
     },
     "engines": {
         "node": "18.x"
