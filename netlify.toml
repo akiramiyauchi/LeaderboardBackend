@@ -1,8 +1,5 @@
 [build]
   functions = "functions"
 
-[functions]
-  directory = "functions"
-
 [functions."cleanupLeaderboard"]
   schedule = "0 0 1 * *" # 毎月1日 0時に実行
