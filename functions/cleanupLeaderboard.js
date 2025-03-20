@@ -56,7 +56,7 @@ async function cleanLeaderboardEntries(leaderboardName) {
         const entryDate = new Date(entry.timestamp * 1000);
         return (
             entryDate.getFullYear() < currentYear ||
-            (entryDate.getFullYear() === currentYear && entryDate.getMonth() + 1 < currentMonth)
+            (entryDate.getFullYear() === currentYear && entryDate.getMonth() + 1 === currentMonth)
         );
     });
 
