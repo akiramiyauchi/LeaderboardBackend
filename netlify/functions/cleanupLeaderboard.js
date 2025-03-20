@@ -5,7 +5,8 @@ const APP_ID = "7951375894910515";
 const APP_SECRET = "a7fa72a764bb60aa20513e272fceeee3";
 const ACCESS_TOKEN = `OC|${APP_ID}|${APP_SECRET}`;
 
-const LEADERBOARDS = ["HIGH_SCORE_MONTH", "HIGH_SCORE_SPEED"];
+const LEADERBOARDS = ["TEST", "TEST2"];
+//const LEADERBOARDS = ["HIGH_SCORE_MONTH", "HIGH_SCORE_SPEED"];
 
 // Netlify Function (毎月1日に実行)
 exports.handler = async function () {
@@ -65,7 +66,7 @@ async function cleanLeaderboardEntries(leaderboardName) {
         const entryDate = new Date(entry.timestamp * 1000); // UNIX秒をミリ秒に変換
         if (entryDate.getMonth() + 1 !== currentMonth || entryDate.getFullYear() !== currentYear) {
             console.log(`== Deleting: ${entry.user.alias} (${entryDate.toISOString().slice(0, 10)}) ==`);
-            //await deleteEntry(entry.id, leaderboardName);
+            await deleteEntry(entry.id, leaderboardName);
         }
     }
 }
