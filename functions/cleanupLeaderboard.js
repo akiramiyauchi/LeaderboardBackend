@@ -5,7 +5,7 @@ const APP_ID = "7951375894910515";
 const APP_SECRET = "a7fa72a764bb60aa20513e272fceeee3";
 const ACCESS_TOKEN = `OC|${APP_ID}|${APP_SECRET}`;
 
-const LEADERBOARDS = ["TEST", "TEST2", "HIGH_SCORE_SPEED"];
+const LEADERBOARDS = ["HIGH_SCORE_MONTH", "HIGH_SCORE_SPEED"];
 
 // ✅ Netlify Function
 exports.handler = async function () {
@@ -56,7 +56,7 @@ async function cleanLeaderboardEntries(leaderboardName) {
         const entryDate = new Date(entry.timestamp * 1000);
         return (
             entryDate.getFullYear() < currentYear ||
-            (entryDate.getFullYear() === currentYear && entryDate.getMonth() + 1 === currentMonth)
+            (entryDate.getFullYear() === currentYear && entryDate.getMonth() + 1 < currentMonth)
         );
     });
 
