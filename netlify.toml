@@ -1,8 +1,8 @@
 [build]
-  functions = "LeaderboardBackend/netlify/functions"
+  functions = "functions"
 
 [functions]
-  directory = "LeaderboardBackend/netlify/functions"
+  directory = "functions"
 
 [functions."cleanupLeaderboard"]
-  schedule = "0 0 1 * *"  # 毎月1日 0時に実行
+  schedule = "0 0 1 * *" # 毎月1日 0時に実行
