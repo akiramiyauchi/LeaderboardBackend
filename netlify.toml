@@ -1,6 +1,8 @@
 [build]
   functions = "netlify/functions"
 
-# ✅ cleanupLeaderboard.js を毎月1日に実行
+[functions]
+  directory = "netlify/functions"
+
 [functions."cleanupLeaderboard"]
-schedule = "0 0 1 * *"
+  schedule = "0 0 1 * *"  # 毎月1日 0時に実行
