@@ -3,4 +3,5 @@
 
 [functions."cleanupLeaderboard"]
   #schedule = "0 0 1 * *" # 毎月1日 0時に実行
-  schedule = "0 0 * * *"  # ✅ 毎日 0時に実行
+  #schedule = "0 0 * * *"  # ✅ 毎日 0時に実行
+  schedule = "0 0 1,2,3,10,20 * *"  # ✅ 毎月 1日, 2日, 3日, 10日, 20日 の 0時に実行
