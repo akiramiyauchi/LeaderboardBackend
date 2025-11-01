@@ -1,94 +1,93 @@
-// netlify/functions/leaderboard.js
 const fetch = require("node-fetch"); // v2
 
-const APP_ID = "7951375894910515";
-const APP_SECRET = "a7fa72a764bb60aa20513e272fceeee3";
-const ACCESS_TOKEN = `OC|${APP_ID}|${APP_SECRET}`;
+exports.handler = async function (event) {
+  const APP_ID = "7951375894910515";
+  const APP_SECRET = "a7fa72a764bb60aa20513e272fceeee3";
+  const ACCESS_TOKEN = `OC|${APP_ID}|${APP_SECRET}`;
 
-const MAX_ENTRIES = 300;      // 返す最大件数
-const PAGE_LIMIT  = 100;      // 1ページあたり
-const MAX_PAGES   = 5;        // 念のための上限
-const TIMEOUT_MS  = 5000;     // 1リクエストあたりのタイムアウト
-const RETRIES     = 3;        // 503/429/5xx の再試行回数
+  const params = new URLSearchParams(event.queryStringParameters || {});
+  const apiName = params.get("api_name") || "HIGH_SCORE_ALL";
 
-// 503/429などにリトライ付きのfetch
-async function fetchWithRetry(url, opts = {}, retries = RETRIES) {
-  for (let i = 0; i <= retries; i++) {
-    const ac = new AbortController();
-    const t  = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  // 取得件数を抑えつつ（サイト表示用）・カーソルで進む
+  const MAX_ENTRIES = 300;
+  const PAGE_SIZE = apiName === "HIGH_SCORE_ALL" ? 50 : 100; // まず50件ずつ
+  const FIELDS = "rank,user{alias,display_name,id},score,timestamp,id";
+
+  async function getPageByCursor(after, limit) {
+    const url =
+      `https://graph.oculus.com/leaderboard_entries` +
+      `?api_name=${encodeURIComponent(apiName)}` +
+      `&fields=${encodeURIComponent(FIELDS)}` +
+      `&filter=NONE&limit=${limit}` +
+      (after ? `&after=${encodeURIComponent(after)}` : "") +
+      `&access_token=${ACCESS_TOKEN}`;
+
+    // タイムアウト制御
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 6000);
     try {
-      const res = await fetch(url, { ...opts, signal: ac.signal });
-      clearTimeout(t);
-      if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
-        if (i < retries) {
-          const backoff = 250 * Math.pow(2, i) + Math.floor(Math.random() * 100);
-          await new Promise(r => setTimeout(r, backoff));
-          continue;
-        }
+      const res = await fetch(url, { signal: controller.signal });
+      const json = await res.json();
+      if (!res.ok) {
+        const msg = json?.error?.message || "Unknown error";
+        throw new Error(`API ${res.status}: ${msg}`);
       }
-      return res; // 2xx/4xx/5xx最終
-    } catch (e) {
+      const nextAfter = json?.paging?.cursors?.after || null;
+      return { data: json?.data || [], after: nextAfter };
+    } finally {
       clearTimeout(t);
-      if (i < retries) {
-        const backoff = 250 * Math.pow(2, i) + Math.floor(Math.random() * 100);
-        await new Promise(r => setTimeout(r, backoff));
-        continue;
-      }
-      throw e;
     }
   }
-}
 
-exports.handler = async function (event) {
-  try {
-    const params = new URLSearchParams(event.queryStringParameters || {});
-    const apiName = (params.get("api_name") || "HIGH_SCORE_ALL").trim();
-
-    // 任意: ホワイトリスト（悪用防止）
-    // const ALLOWED = new Set(["HIGH_SCORE_ALL","HIGH_SCORE_MONTH","HIGH_SCORE_SPEED","HIGH_SCORE_SPEED_ALL"]);
-    // if (!ALLOWED.has(apiName)) return { statusCode: 400, body: "invalid api_name" };
-
-    let url = `https://graph.oculus.com/leaderboard_entries?api_name=${encodeURIComponent(apiName)}&fields=rank,user{alias,display_name},score,timestamp&id_format=OBJECT&filter=NONE&limit=${PAGE_LIMIT}&access_token=${ACCESS_TOKEN}`;
-
+  async function fetchAllByCursor() {
     const results = [];
-    let pages = 0;
+    let after = null;
+    let limit = PAGE_SIZE;
+    let triesSameCursor = 0;
 
-    while (url && results.length < MAX_ENTRIES && pages < MAX_PAGES) {
-      pages++;
-      const res  = await fetchWithRetry(url, { headers: { "Accept": "application/json" } });
-      const json = await res.json();
-
-      if (!res.ok) {
-        const msg = json?.error?.message || `${res.status} ${res.statusText}`;
-        // ここで throw すると上でキャッチ→500になる
-        throw new Error(`APIエラー: ${msg}`);
+    while (results.length < MAX_ENTRIES) {
+      try {
+        const { data, after: nextAfter } = await getPageByCursor(after, limit);
+        results.push(...data);
+        if (!nextAfter || data.length === 0) break; // 取り切り
+        after = nextAfter;
+        triesSameCursor = 0;         // 正常に進んだのでリセット
+      } catch (err) {
+        // next が壊れている時でも、カーソルで小刻みに進めるためのフォールバック
+        triesSameCursor += 1;
+        if (triesSameCursor >= 3 && limit > 1) {
+          // ページサイズを落として再試行（50→25→10→5→1）
+          if (limit > 25) limit = 25;
+          else if (limit > 10) limit = 10;
+          else if (limit > 5) limit = 5;
+          else limit = 1;
+          triesSameCursor = 0;
+        } else if (triesSameCursor >= 3 && limit === 1) {
+          // 1件取得でもダメなら打ち切る（部分結果を返す）
+          break;
+        }
+        await new Promise(r => setTimeout(r, 300)); // 軽いバックオフ
       }
-
-      if (Array.isArray(json.data)) {
-        results.push(...json.data);
-        if (results.length >= MAX_ENTRIES) break;
-      }
-
-      url = json?.paging?.next || null;
     }
+    return results.slice(0, MAX_ENTRIES);
+  }
 
-    // 返却
+  try {
+    const data = await fetchAllByCursor();
+
     return {
       statusCode: 200,
       headers: {
-        "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
-        // Netlify CDNキャッシュ（1分）＋古いのを5分再利用
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify(results.slice(0, MAX_ENTRIES)),
+      body: JSON.stringify(data),
     };
-  } catch (error) {
-    console.error("エラー詳細:", error);
+  } catch (e) {
+    console.error("leaderboard function error:", e);
     return {
-      statusCode: 503, // upstream 一時障害を反映
-      headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ message: "Failed to load data.", error: String(error) }),
+      statusCode: 502,
+      body: JSON.stringify({ message: "Upstream fetch failed.", error: String(e) }),
     };
   }
 };
