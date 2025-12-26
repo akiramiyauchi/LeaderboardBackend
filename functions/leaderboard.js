@@ -1,7 +1,8 @@
 const fetch = require("node-fetch"); // v2
 
 // ---- Tunables -------------------------------------------------
-const TIMEOUT_MS = 3500;             // 1リクエストの短タイムアウト
+const TIMEOUT_MS_ALL = 3500;
+const TIMEOUT_MS_OTHER = 12000;
 const PAGE1_LIMIT = 50;              // 先頭ページ
 const PAGE2_CANDIDATES = [50, 40, 30, 25, 20, 10]; // 2ページ目の並列レース
 // ----------------------------------------------------------------
@@ -18,17 +19,16 @@ exports.handler = async function (event) {
   const MAX_ENTRIES = apiName === "HIGH_SCORE_ALL" ? 100 : 300;
   const FIELDS = "rank,user{alias,display_name,id},score,timestamp,id";
 
-  function withTimeout(url) {
-    const controller = new AbortController();
-    const to = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    const p = fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "Accept-Encoding": "gzip", // 圧縮（node-fetchが解凍）
-      },
-    }).finally(() => clearTimeout(to));
-    return p;
-  }
+  function getTimeoutMs() {
+  return apiName === "HIGH_SCORE_ALL" ? TIMEOUT_MS_ALL : TIMEOUT_MS_OTHER;
+}
+
+function withTimeout(url) {
+  const controller = new AbortController();
+  const to = setTimeout(() => controller.abort(), getTimeoutMs());
+  return fetch(url, { signal: controller.signal, headers: { "Accept-Encoding": "gzip" } })
+    .finally(() => clearTimeout(to));
+}
 
   function buildUrl({ after = null, limit }) {
     return (
