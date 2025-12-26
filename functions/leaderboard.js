@@ -186,21 +186,26 @@ exports.handler = async function (event) {
       body: JSON.stringify(unique),
     };
   } catch (e) {
+    console.log("[LB] FAIL", {
+      apiName,
+      name: e?.name,
+      message: e?.message,
+      httpStatus: e?.httpStatus,
+      oculusCode: e?.oculusCode,
+    });
+  
     // 失敗時でも1ページ目だけ返せるなら返す
     try {
       const page1 = await fetchPage(null, PAGE1_LIMIT);
-      const unique = normalizeAndDedup(page1.data);
-
       return {
         statusCode: 200,
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",
-          "Cache-Control": "max-age=10",
         },
-        body: JSON.stringify(unique),
+        body: JSON.stringify(page1.data),
       };
-    } catch (e2) {
+    } catch {
       return {
         statusCode: 502,
         headers: {
