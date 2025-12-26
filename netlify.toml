@@ -1,6 +1,11 @@
 [build]
+  command = ""
+  publish = "."
   functions = "functions"
 
+[build.environment]
+  NODE_VERSION = "18"
+  
 [functions."cleanupLeaderboard"]
   #schedule = "0 0 1 * *" # 毎月1日 0時に実行
   #schedule = "0 0 * * *"  # ✅ 毎日 0時に実行
