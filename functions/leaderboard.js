@@ -5,7 +5,7 @@ const fetch = require("node-fetch"); // v2
 const TIMEOUT_MS_ALL = 3500;
 const TIMEOUT_MS_OTHER = 12000;
 
-const PAGE1_LIMIT = 50;
+const PAGE1_LIMIT = 20;
 
 // 2ページ目候補（ALLの高速化用）
 const PAGE2_CANDIDATES = [50, 40, 30, 25, 20, 10];
