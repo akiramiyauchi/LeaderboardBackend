@@ -5,6 +5,7 @@ const fetch = require("node-fetch"); // v2
 const TIMEOUT_MS_ALL = 3500;
 const TIMEOUT_MS_OTHER = 12000;
 
+// 1ページ目　50だとMonthlyでエラー500がでたため小さくした。
 const PAGE1_LIMIT = 20;
 
 // 2ページ目候補（ALLの高速化用）
