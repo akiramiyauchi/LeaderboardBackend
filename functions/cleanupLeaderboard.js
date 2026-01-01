@@ -97,7 +97,22 @@ async function fetchLeaderboardEntries(leaderboardName) {
     ];
 
     while (nextUrls.length > 0) {
-        const requests = nextUrls.map((url) => fetch(url).then((res) => res.json()));
+        const requests = nextUrls.map((url) =>
+              fetch(url).then(async (res) => {
+                const text = await res.text(); // まず生で読む
+                let json;
+                try { json = JSON.parse(text); } catch { json = null; }
+            
+                if (!res.ok || (json && json.error)) {
+                  console.log("❌ Fetch failed:", leaderboardName);
+                  console.log("URL:", url);
+                  console.log("HTTP:", res.status);
+                  console.log("BODY:", text.slice(0, 500)); // 長すぎ防止
+                  throw new Error(`Fetch failed ${leaderboardName} HTTP ${res.status}`);
+                }
+                return json;
+              })
+            );
 
         try {
             const responses = await Promise.all(requests);
