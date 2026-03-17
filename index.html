@@ -129,9 +129,13 @@
 
     let nextPageUrl = null; 
 
-    function formatDate(timestamp) {
+    function formatDate(timestamp, includeYear = false) {
         const date = new Date(timestamp * 1000);
-        return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+    
+        return includeYear ? `${year}/${month}/${day}` : `${month}/${day}`;
     }
 
     function formatSpeedTime(score) {
@@ -182,7 +186,9 @@
                         return; 
                     }
                     const score = parseInt(entry.score, 10);
-                    const formattedDate = entry.timestamp ? formatDate(entry.timestamp) : "N/A";
+                    const formattedDate = entry.timestamp
+                        ? formatDate(entry.timestamp, leaderboardType === "HIGH_SCORE_ALL")
+                        : "N/A";
 
                     let timeValue = "";
                     let levelColumn = "";
