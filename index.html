@@ -121,20 +121,45 @@
 
 <script>
     const apiBaseUrl = 'https://easypong-leaderboard.netlify.app/.netlify/functions/leaderboard';
+
     const levelMapping = [
         "Beginner 1", "Beginner 2", "Beginner 3", "Beginner 4",
         "Advanced 1", "Advanced 2", "Advanced 3", "Advanced 4", "Advanced 5",
         "Expert 1", "Expert 2", "Expert 3", "Expert 4"
     ];
 
-    let nextPageUrl = null; 
+    let nextPageUrl = null;
+
+    function isOddMonth() {
+        // JavaScript の getMonth() は 0始まりなので +1 する
+        const month = new Date().getMonth() + 1;
+        return month % 2 === 1;
+    }
+
+    function getLeaderboardApiName(selectedType) {
+        const odd = isOddMonth();
+
+        if (selectedType === "HIGH_SCORE_MONTH") {
+            return odd ? "HIGH_SCORE_MONTH_ODD" : "HIGH_SCORE_MONTH";
+        }
+
+        if (selectedType === "HIGH_SCORE_SPEED") {
+            return odd ? "HIGH_SCORE_SPEED_ODD" : "HIGH_SCORE_SPEED";
+        }
+
+        return "HIGH_SCORE_ALL";
+    }
+
+    function buildApiUrl(apiName) {
+        return `${apiBaseUrl}?api_name=${encodeURIComponent(apiName)}&limit=50`;
+    }
 
     function formatDate(timestamp, includeYear = false) {
         const date = new Date(timestamp * 1000);
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
-    
+
         return includeYear ? `${year}/${month}/${day}` : `${month}/${day}`;
     }
 
@@ -144,22 +169,50 @@
         const minutes = Math.floor(rallyTimeInMilliseconds / 60000);
         const seconds = Math.floor((rallyTimeInMilliseconds % 60000) / 1000);
         const milliseconds = rallyTimeInMilliseconds % 1000;
+
         return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
     }
+
     function isCurrentMonthEntry(timestamp) {
+        if (!timestamp) return false;
+
         const entryDate = new Date(timestamp * 1000);
         const now = new Date();
-        return entryDate.getFullYear() === now.getFullYear() && entryDate.getMonth() === now.getMonth();
+
+        return entryDate.getFullYear() === now.getFullYear()
+            && entryDate.getMonth() === now.getMonth();
     }
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, char => {
+            const map = {
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#039;"
+            };
+            return map[char];
+        });
+    }
+
     function fetchLeaderboard(reset = true) {
-        const leaderboardType = document.getElementById('leaderboardType').value;
-        let apiUrl = `${apiBaseUrl}?api_name=${leaderboardType}&limit=50`;
+        const selectedType = document.getElementById('leaderboardType').value;
+        const apiName = getLeaderboardApiName(selectedType);
+
+        if (reset) {
+            nextPageUrl = null;
+        }
+
+        let apiUrl = buildApiUrl(apiName);
 
         if (!reset && nextPageUrl) {
             apiUrl = nextPageUrl;
         }
 
-        const isSpeedRanking = leaderboardType === "HIGH_SCORE_SPEED";
+        const isSpeedRanking = selectedType === "HIGH_SCORE_SPEED";
+        const isMonthlyRanking = selectedType === "HIGH_SCORE_MONTH";
+
         document.getElementById('levelHeader').style.display = isSpeedRanking ? "none" : "table-cell";
         document.getElementById('damageHeader').style.display = isSpeedRanking ? "none" : "table-cell";
 
@@ -171,23 +224,25 @@
                 return response.json();
             })
             .then(data => {
-                const leaderboardData = data.data || data;
+                const leaderboardData = Array.isArray(data) ? data : (data.data || []);
                 const leaderboard = document.getElementById('leaderboard');
 
                 if (reset) {
-                    leaderboard.innerHTML = ''; 
+                    leaderboard.innerHTML = '';
                 }
 
+                let displayedCount = 0;
+
                 leaderboardData.forEach(entry => {
-                    if (leaderboardType === "HIGH_SCORE_MONTH" && !isCurrentMonthEntry(entry.timestamp)) {
-                        return; 
+                    // 偶数月・奇数月でボードを分けても、同じボードは2か月後に再利用される。
+                    // そのため Monthly / Speed は現在月のデータだけ表示する。
+                    if ((isMonthlyRanking || isSpeedRanking) && !isCurrentMonthEntry(entry.timestamp)) {
+                        return;
                     }
-                    if (leaderboardType === "HIGH_SCORE_SPEED" && !isCurrentMonthEntry(entry.timestamp)) {
-                        return; 
-                    }
+
                     const score = parseInt(entry.score, 10);
                     const formattedDate = entry.timestamp
-                        ? formatDate(entry.timestamp, leaderboardType === "HIGH_SCORE_ALL")
+                        ? formatDate(entry.timestamp, selectedType === "HIGH_SCORE_ALL")
                         : "N/A";
 
                     let timeValue = "";
@@ -199,31 +254,48 @@
                     } else {
                         const levelIndex = Math.floor(score / 1000000);
                         const level = levelMapping[levelIndex] || "Unknown";
+
                         const life = Math.floor((score % 1000000) / 10000);
                         const damage = 11 - life;
-                        levelColumn = `<td>${level}</td>`;
-                        damageColumn = `<td>${damage}</td>`;
+
+                        levelColumn = `<td>${escapeHtml(level)}</td>`;
+                        damageColumn = `<td>${escapeHtml(damage)}</td>`;
 
                         const timePoint = score % 10000;
                         const rallyTimeInSeconds = 3600 - timePoint;
                         const minutes = Math.floor(rallyTimeInSeconds / 60);
                         const seconds = rallyTimeInSeconds % 60;
+
                         timeValue = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
                     }
 
+                    const userName = entry.user?.display_name || entry.user?.alias || "Unknown";
+
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${entry.rank}</td>
-                        <td>${entry.user.display_name || entry.user.alias}</td>
+                        <td>${escapeHtml(entry.rank)}</td>
+                        <td>${escapeHtml(userName)}</td>
                         ${isSpeedRanking ? "" : levelColumn}
                         ${isSpeedRanking ? "" : damageColumn}
-                        <td>${timeValue}</td>
-                        <td>${formattedDate}</td>
+                        <td>${escapeHtml(timeValue)}</td>
+                        <td>${escapeHtml(formattedDate)}</td>
                     `;
+
                     leaderboard.appendChild(row);
+                    displayedCount++;
                 });
 
-                nextPageUrl = data.paging?.next || null;
+                if (displayedCount === 0) {
+                    leaderboard.innerHTML = `
+                        <tr>
+                            <td colspan="6">No entries for this month yet.</td>
+                        </tr>
+                    `;
+                }
+
+                // 今の Netlify Function は配列を返す形なので、基本的には nextPageUrl は null のまま。
+                // data.paging.next が返る形に戻した場合だけ Load More が有効になる。
+                nextPageUrl = Array.isArray(data) ? null : (data.paging?.next || null);
 
                 const loadMoreBtn = document.getElementById("loadMoreBtn");
                 loadMoreBtn.style.display = nextPageUrl ? "block" : "none";
