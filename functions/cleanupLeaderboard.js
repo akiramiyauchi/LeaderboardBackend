@@ -5,19 +5,36 @@ const APP_ID = "7951375894910515";
 const APP_SECRET = "a7fa72a764bb60aa20513e272fceeee3";
 const ACCESS_TOKEN = `OC|${APP_ID}|${APP_SECRET}`;
 
-const LEADERBOARDS = ["HIGH_SCORE_MONTH", "HIGH_SCORE_SPEED"];
-
 // 取得上限（Netlify 実行時間対策）
 const FETCH_MAX_ENTRIES = 500;
 
-// リトライ設定（transient=true / 5xx のとき）
+// リトライ設定
 const FETCH_MAX_RETRIES = 4;
 
-// 削除の同時実行数（多すぎると 500/2 を誘発しやすい）
+// 削除の同時実行数
 const DELETE_CONCURRENCY = 5;
 
 // ====== Helpers ======
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function isOddMonth(date = new Date()) {
+  return (date.getMonth() + 1) % 2 === 1;
+}
+
+// 今月が奇数月なら、先月は偶数月ボード。
+// 今月が偶数月なら、先月は奇数月ボード。
+function getPreviousMonthLeaderboards(date = new Date()) {
+  const nowIsOdd = isOddMonth(date);
+
+  return nowIsOdd
+    ? ["HIGH_SCORE_MONTH", "HIGH_SCORE_SPEED"]
+    : ["HIGH_SCORE_MONTH_ODD", "HIGH_SCORE_SPEED_ODD"];
+}
+
+function isSpeedLeaderboard(leaderboardName) {
+  return leaderboardName === "HIGH_SCORE_SPEED" ||
+         leaderboardName === "HIGH_SCORE_SPEED_ODD";
+}
 
 async function fetchJsonWithRetry(url, label, maxRetries = FETCH_MAX_RETRIES) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -36,28 +53,23 @@ async function fetchJsonWithRetry(url, label, maxRetries = FETCH_MAX_RETRIES) {
       (apiError && apiError.is_transient === true) ||
       res.status >= 500;
 
-    // 成功
     if (res.ok && !apiError) return json;
 
-    // 失敗ログ（長すぎないように）
     console.log(
       `❌ Fetch failed (${label}) attempt=${attempt} HTTP=${res.status} transient=${isTransient}`
     );
     console.log(`BODY: ${text.slice(0, 300)}`);
 
-    // transient じゃない or リトライ尽きた → 例外
     if (!isTransient || attempt === maxRetries) {
       throw new Error(`Fetch failed ${label} HTTP ${res.status}`);
     }
 
-    // 指数バックオフ + ジッター
     const backoff = Math.min(1000 * Math.pow(2, attempt), 10000);
     const jitter = Math.floor(Math.random() * 400);
     await sleep(backoff + jitter);
   }
 
-  // ここには基本来ない
-  throw new Error(`Fetch failed ${label} (unexpected)`);
+  throw new Error(`Fetch failed ${label} unexpected`);
 }
 
 async function mapWithConcurrency(items, concurrency, worker) {
@@ -83,17 +95,19 @@ async function mapWithConcurrency(items, concurrency, worker) {
 exports.handler = async function () {
   console.log("==== Start Cleaning Leaderboards ====");
 
+  const leaderboardsToClean = getPreviousMonthLeaderboards();
+
+  console.log("🧹 Leaderboards to clean:", leaderboardsToClean);
+
   const results = [];
 
-  // ✅ 直列で実行しつつ、失敗しても次へ
-  for (const leaderboardName of LEADERBOARDS) {
+  for (const leaderboardName of leaderboardsToClean) {
     try {
       await cleanLeaderboardEntries(leaderboardName);
       results.push({ leaderboardName, ok: true });
     } catch (e) {
       console.error(`❌ Failed leaderboard: ${leaderboardName}`, e);
       results.push({ leaderboardName, ok: false, error: e.message });
-      // 続行
     }
   }
 
@@ -115,45 +129,32 @@ async function cleanLeaderboardEntries(leaderboardName) {
   const allEntries = await fetchLeaderboardEntries(leaderboardName);
   console.log(`✅ Total ${allEntries.length} entries fetched for ${leaderboardName}.`);
 
-  // 🔹 HIGH_SCORE_SPEED のトップエントリーを保存（取得できた場合のみ）
-  if (leaderboardName === "HIGH_SCORE_SPEED") {
+  // スピードランキングは、削除前に1位を ALL TIME に保存
+  if (isSpeedLeaderboard(leaderboardName)) {
     const topEntry = allEntries.find((entry) => entry.rank === 1);
+
     if (topEntry) {
-      console.log("🏆 Saving top entry to HIGH_SCORE_SPEED_ALL");
+      console.log(`🏆 Saving top entry from ${leaderboardName} to HIGH_SCORE_SPEED_ALL`);
       await saveEntryToAllTimeLeaderboard(topEntry);
     } else {
-      console.log("ℹ️ No top entry found for HIGH_SCORE_SPEED (maybe empty).");
+      console.log(`ℹ️ No top entry found for ${leaderboardName}.`);
     }
   }
 
-  // 🔹 現在の年月
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
-
-  // 🔹 削除対象（前月以前）
-  const entriesToDelete = allEntries.filter((entry) => {
-    const ts = Number(entry.timestamp);
-    if (!Number.isFinite(ts) || ts <= 0) return false;
-
-    const entryDate = new Date(ts * 1000);
-    const y = entryDate.getFullYear();
-    const m = entryDate.getMonth() + 1;
-
-    return y < currentYear || (y === currentYear && m < currentMonth);
-  });
+  // 奇数月/偶数月でボードを分けたので、対象ボードは丸ごと削除
+  const entriesToDelete = allEntries;
 
   console.log(`🗑️ Found ${entriesToDelete.length} entries to delete in ${leaderboardName}`);
+
   if (entriesToDelete.length > 0) {
     console.log("📋 Sample delete IDs:", entriesToDelete.slice(0, 5).map((e) => e.id));
   }
 
   if (entriesToDelete.length === 0) {
-    console.log(`🗑️ Completed cleanup for ${leaderboardName} (nothing to delete)`);
+    console.log(`🗑️ Completed cleanup for ${leaderboardName} nothing to delete`);
     return;
   }
 
-  // 🔹 削除（同時実行制限あり）
   const deleteResults = await mapWithConcurrency(
     entriesToDelete,
     DELETE_CONCURRENCY,
@@ -164,6 +165,7 @@ async function cleanLeaderboardEntries(leaderboardName) {
   const failureCount = deleteResults.length - successCount;
 
   console.log(`✅ Successfully deleted ${successCount} entries from ${leaderboardName}`);
+
   if (failureCount > 0) {
     console.log(`❌ Failed to delete ${failureCount} entries from ${leaderboardName}`);
   }
@@ -175,6 +177,7 @@ async function fetchLeaderboardEntries(leaderboardName) {
   console.log(`📡 Fetching entries for leaderboard: ${leaderboardName}`);
 
   let allEntries = [];
+
   let nextUrl =
     `https://graph.oculus.com/leaderboard_entries?api_name=${leaderboardName}` +
     `&access_token=${ACCESS_TOKEN}` +
@@ -184,12 +187,14 @@ async function fetchLeaderboardEntries(leaderboardName) {
   while (nextUrl) {
     const data = await fetchJsonWithRetry(nextUrl, leaderboardName);
 
-    if (data?.data) allEntries.push(...data.data);
+    if (data?.data) {
+      allEntries.push(...data.data);
+    }
+
     nextUrl = data?.paging?.next || null;
 
-    // Netlify 実行時間対策
     if (allEntries.length >= FETCH_MAX_ENTRIES) {
-      console.log(`⚠️ Fetch limit reached (${FETCH_MAX_ENTRIES} entries), stopping.`);
+      console.log(`⚠️ Fetch limit reached ${FETCH_MAX_ENTRIES} entries, stopping.`);
       break;
     }
   }
@@ -197,13 +202,19 @@ async function fetchLeaderboardEntries(leaderboardName) {
   return allEntries;
 }
 
-// ✅ トップスコアを ALL TIME リーダーボードに保存
+// スピード月間1位を ALL TIME に保存
 async function saveEntryToAllTimeLeaderboard(entry) {
   console.log(`🔄 Saving entry ${entry.id} to HIGH_SCORE_SPEED_ALL`);
 
   const scoreValue = parseInt(entry.score, 10);
+
   if (isNaN(scoreValue)) {
-    console.log(`❌ Invalid score format for entry ${entry.id}, skipping...`);
+    console.log(`❌ Invalid score format for entry ${entry.id}, skipping.`);
+    return;
+  }
+
+  if (!entry.user?.id) {
+    console.log(`❌ Missing user id for entry ${entry.id}, skipping.`);
     return;
   }
 
@@ -221,28 +232,29 @@ async function saveEntryToAllTimeLeaderboard(entry) {
     body,
   });
 
+  const text = await response.text();
+
   if (response.ok) {
     console.log(`✅ Successfully saved entry ${entry.id} to HIGH_SCORE_SPEED_ALL.`);
   } else {
-    console.log(`❌ Failed to save entry ${entry.id}. Response:`, (await response.text()).slice(0, 300));
+    console.log(`❌ Failed to save entry ${entry.id}. Response:`, text.slice(0, 300));
   }
 }
 
-// ✅ リーダーボードのエントリー削除
+// リーダーボードのエントリー削除
 async function deleteEntry(entryId, leaderboardName) {
   const deleteUrl = `https://graph.oculus.com/${entryId}?access_token=${ACCESS_TOKEN}`;
 
   const response = await fetch(deleteUrl, { method: "DELETE" });
 
   if (response.ok) {
-    // ログ増やしすぎない（必要ならコメントアウト解除）
-    // console.log(`✅ Deleted entry: ${entryId} (${leaderboardName})`);
     return { success: true };
-  } else {
-    console.log(
-      `❌ Failed to delete entry ${entryId} (${leaderboardName}). Response:`,
-      (await response.text()).slice(0, 300)
-    );
-    return { success: false };
   }
+
+  console.log(
+    `❌ Failed to delete entry ${entryId} (${leaderboardName}). Response:`,
+    (await response.text()).slice(0, 300)
+  );
+
+  return { success: false };
 }
